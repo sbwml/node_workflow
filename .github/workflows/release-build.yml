@@ -1,0 +1,64 @@
+name: Build node packages
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - aarch64_cortex-a53
+          - aarch64_cortex-a72
+          - aarch64_cortex-a76
+          - aarch64_generic
+          - arm_arm1176jzf-s_vfp
+          - arm_cortex-a15_neon-vfpv4
+          - arm_cortex-a5_vfpv4
+          - arm_cortex-a7_neon-vfpv4
+          - arm_cortex-a7_vfpv4
+          - arm_cortex-a8_vfpv3
+          - arm_cortex-a9_neon
+          - arm_cortex-a9_vfpv3-d16
+          - i386_pentium-mmx
+          - i386_pentium4
+          - x86_64
+        tag:
+          - openwrt-25.12
+
+    steps:
+      - uses: actions/checkout@main
+        with:
+          fetch-depth: 0
+
+      - name: export node version
+        run: |
+          node_version=$(awk -F ':=' '/^PKG_VERSION:=/{print $2}' node/Makefile)
+          echo "node_version=v$node_version" >> $GITHUB_ENV
+
+      - name: Building packages
+        uses: sbwml/openwrt-gh-action-sdk@main
+        env:
+          ARCH: ${{ matrix.arch }}-${{ matrix.tag }}
+          FEEDNAME: packages_ci
+          PACKAGES: node
+          NO_REFRESH_CHECK: true
+
+      - name: Create compress files
+        continue-on-error: true
+        run: |
+          tar -zcvf ${{ matrix.arch }}.tar.gz -C bin/packages/${{ matrix.arch }}/packages_ci/ * 
+
+      - name: Create release
+        continue-on-error: true
+        uses: ncipollo/release-action@main
+        with:
+          name: node-${{ env.node_version }}
+          allowUpdates: true
+          tag: ${{ env.node_version }}
+          commit: main
+          replacesArtifacts: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          artifacts: ${{ matrix.arch }}.tar.gz
